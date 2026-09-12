@@ -2,7 +2,8 @@
   <div class="settings">
     <a-card title="安全入口" :loading="loading">
       <a-alert type="warning" style="margin-bottom: 16px">
-        修改后旧入口立即失效。开发模式（Vite）仍走 /__dev__，正式访问请用新入口。
+        修改后旧入口立即失效。
+        <template v-if="isDev">开发模式（Vite）仍走 /__dev__，正式访问请用新入口。</template>
       </a-alert>
       <a-form :model="entryForm" layout="vertical" @submit="saveEntry">
         <a-form-item field="admin_entry" label="Cursor Login Admin 安全入口（路径）" required>
@@ -50,6 +51,7 @@ const router = useRouter()
 const loading = ref(true)
 const savingEntry = ref(false)
 const savingAccount = ref(false)
+const isDev = import.meta.env.DEV
 
 const entryForm = reactive({
   admin_entry: '',

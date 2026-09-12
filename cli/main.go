@@ -73,7 +73,8 @@ func run(args []string) int {
 	prev, err := client.Preview(code)
 	if err != nil {
 		var ae *api.APIError
-		if errors.As(err, &ae) && ae.Status == 404 {
+		if errors.As(err, &ae) {
+			// 业务错误（错码 / 未就绪等）说明已连上服务端，只展示接口文案
 			fmt.Println(banner())
 			fmt.Println(ae.Message)
 			return 1
