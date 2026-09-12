@@ -206,6 +206,7 @@ $Name = "cursor-login-windows-$Arch.exe"
 $Url = "$ApiUrl/download/$Name"
 $Dest = Join-Path $BinDir "cursor-login.exe"
 $Tmp = "$Dest.tmp"
+$ProgressPreference = "SilentlyContinue"
 Write-Host "正在下载 Cursor Login CLI ..."
 try {
   Invoke-WebRequest -Uri $Url -OutFile $Tmp
