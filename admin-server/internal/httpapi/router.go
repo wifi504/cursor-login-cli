@@ -39,6 +39,8 @@ func NewRouter(s *Server) *gin.Engine {
 	r.Use(gin.Recovery())
 
 	r.GET("/api/health", s.handleHealth)
+	r.POST("/api/claim/preview", s.handleClaimPreview)
+	r.POST("/api/claim", s.handleClaimRedeem)
 
 	r.GET("/install.sh", s.handleInstallSH)
 	r.GET("/uninstall.sh", s.handleUninstallSH)

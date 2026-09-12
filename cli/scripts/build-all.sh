@@ -6,11 +6,18 @@ cd "$(dirname "$0")/.."
 mkdir -p dist
 export CGO_ENABLED=0
 
+VER=dev
+if tag=$(git describe --exact-match --tags HEAD 2>/dev/null); then
+  VER="$tag"
+fi
+echo "version=${VER}"
+LDFLAGS="-X main.version=${VER}"
+
 build_one() {
   local goos="$1" goarch="$2" ext="${3:-}"
   local out="dist/cursor-login-${goos}-${goarch}${ext}"
   echo "编译 ${out}"
-  GOOS="$goos" GOARCH="$goarch" go build -o "$out" .
+  GOOS="$goos" GOARCH="$goarch" go build -ldflags "$LDFLAGS" -o "$out" .
 }
 
 build_one windows amd64 .exe

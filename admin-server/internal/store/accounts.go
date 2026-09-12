@@ -196,6 +196,134 @@ func (s *Store) DeleteAccount(id int64) error {
 	return nil
 }
 
+// ClaimPreview 公开预览结果（不含 Token）。
+type ClaimPreview struct {
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	Email        string `json:"email"`
+	Remaining    int    `json:"remaining"`
+	ClaimLimit   int    `json:"claim_limit"`
+	ClaimedCount int    `json:"claimed_count"`
+}
+
+// ClaimRedeem 核销成功结果（含 Token）。
+type ClaimRedeem struct {
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	AccessToken string `json:"access_token"`
+	Remaining   int    `json:"remaining"`
+}
+
+var (
+	ErrClaimExhausted = errors.New("核销次数已用尽，请联系管理员！")
+	// ErrTokenNotReady 邮箱或 AccessToken 任一缺失时不可预览/核销。
+	ErrTokenNotReady = errors.New("账号未就绪，请联系管理员")
+)
+
+func claimReady(a Account) error {
+	if strings.TrimSpace(a.Email) == "" || strings.TrimSpace(a.AccessToken) == "" {
+		return ErrTokenNotReady
+	}
+	return nil
+}
+
+func (s *Store) PreviewByClaimCode(code string) (*ClaimPreview, error) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return nil, ErrNotFound
+	}
+	var a Account
+	err := s.db.QueryRow(`
+SELECT id, name, email, access_token, claim_code, claim_limit, claimed_count, created_at, updated_at
+FROM accounts WHERE claim_code = ?`, code).Scan(
+		&a.ID, &a.Name, &a.Email, &a.AccessToken, &a.ClaimCode,
+		&a.ClaimLimit, &a.ClaimedCount, &a.CreatedAt, &a.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := claimReady(a); err != nil {
+		return nil, err
+	}
+	remaining := a.ClaimLimit - a.ClaimedCount
+	if remaining < 0 {
+		remaining = 0
+	}
+	return &ClaimPreview{
+		ID:           a.ID,
+		Name:         a.Name,
+		Email:        a.Email,
+		Remaining:    remaining,
+		ClaimLimit:   a.ClaimLimit,
+		ClaimedCount: a.ClaimedCount,
+	}, nil
+}
+
+// RedeemByClaimCode 条件更新扣减次数并返回 Token。
+func (s *Store) RedeemByClaimCode(code string) (*ClaimRedeem, error) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return nil, ErrNotFound
+	}
+
+	var a Account
+	err := s.db.QueryRow(`
+SELECT id, name, email, access_token, claim_code, claim_limit, claimed_count, created_at, updated_at
+FROM accounts WHERE claim_code = ?`, code).Scan(
+		&a.ID, &a.Name, &a.Email, &a.AccessToken, &a.ClaimCode,
+		&a.ClaimLimit, &a.ClaimedCount, &a.CreatedAt, &a.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := claimReady(a); err != nil {
+		return nil, err
+	}
+	if a.ClaimedCount >= a.ClaimLimit {
+		return nil, ErrClaimExhausted
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := s.db.Exec(`
+UPDATE accounts SET claimed_count = claimed_count + 1, updated_at = ?
+WHERE claim_code = ? AND claimed_count < claim_limit`, now, code)
+	if err != nil {
+		return nil, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		// 并发下可能刚被领完
+		cur, err2 := s.PreviewByClaimCode(code)
+		if err2 != nil {
+			return nil, err2
+		}
+		if cur.Remaining <= 0 {
+			return nil, ErrClaimExhausted
+		}
+		return nil, ErrConflict
+	}
+
+	remaining := a.ClaimLimit - (a.ClaimedCount + 1)
+	if remaining < 0 {
+		remaining = 0
+	}
+	return &ClaimRedeem{
+		ID:          a.ID,
+		Name:        a.Name,
+		Email:       a.Email,
+		AccessToken: strings.TrimSpace(a.AccessToken),
+		Remaining:   remaining,
+	}, nil
+}
+
 func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false

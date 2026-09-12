@@ -1,47 +1,147 @@
 package main
 
 import (
-	"encoding/json"
+	"bufio"
+	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
-	"time"
+
+	"github.com/wifi504/cursor-login-cli/cli/internal/api"
+	"github.com/wifi504/cursor-login-cli/cli/internal/cursor"
 )
+
+// version 由 -ldflags "-X main.version=..." 注入；默认 dev。
+var version = "dev"
 
 const envAPI = "CURSOR_LOGIN_API"
 
 func main() {
-	api := strings.TrimSpace(os.Getenv(envAPI))
-	if api == "" {
-		fmt.Fprintf(os.Stderr, "Cursor Login CLI：无法连接服务器——尚未完成安装配置。\n")
-		fmt.Fprintf(os.Stderr, "请先使用管理员提供的一键安装命令安装 Cursor Login CLI。\n")
-		os.Exit(1)
-	}
-	api = strings.TrimRight(api, "/")
+	os.Exit(run(os.Args[1:]))
+}
 
-	client := &http.Client{Timeout: 8 * time.Second}
-	url := api + "/api/health"
-	resp, err := client.Get(url)
+func banner() string {
+	return fmt.Sprintf("Cursor Login CLI (%s)", version)
+}
+
+func printHelp() {
+	fmt.Println(banner())
+	fmt.Println("使用方式：cursor-login <上号码>")
+	fmt.Println("请至少运行过一次 Cursor 客户端！")
+}
+
+func isHelp(arg string) bool {
+	switch strings.ToLower(strings.TrimSpace(arg)) {
+	case "help", "-h", "-help", "--help":
+		return true
+	default:
+		return false
+	}
+}
+
+func run(args []string) int {
+	if len(args) == 0 || isHelp(args[0]) {
+		printHelp()
+		return 0
+	}
+	if len(args) > 1 {
+		printHelp()
+		return 1
+	}
+	code := strings.TrimSpace(args[0])
+	if code == "" || isHelp(code) {
+		printHelp()
+		return 0
+	}
+
+	base := strings.TrimSpace(os.Getenv(envAPI))
+	if base == "" {
+		fmt.Println(banner())
+		fmt.Println("服务端连接失败，请重新安装后再次尝试！")
+		fmt.Println("尚未完成安装配置")
+		return 1
+	}
+
+	client := api.New(base)
+	if err := client.Health(); err != nil {
+		fmt.Println(banner())
+		fmt.Println("服务端连接失败，请重新安装后再次尝试！")
+		fmt.Println(api.ReasonAfterColon(err))
+		return 1
+	}
+
+	prev, err := client.Preview(code)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Cursor Login CLI：无法连接服务器：%v\n", err)
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(os.Stderr, "Cursor Login CLI：无法连接服务器：HTTP %d\n", resp.StatusCode)
-		os.Exit(1)
+		var ae *api.APIError
+		if errors.As(err, &ae) && ae.Status == 404 {
+			fmt.Println(banner())
+			fmt.Println(ae.Message)
+			return 1
+		}
+		fmt.Println(banner())
+		fmt.Println("服务端连接失败，请重新安装后再次尝试！")
+		fmt.Println(api.ReasonAfterColon(err))
+		return 1
 	}
 
-	var payload map[string]any
-	_ = json.Unmarshal(body, &payload)
-	fmt.Println("Cursor Login CLI：已连接到 Cursor Login Server")
-	if ok, _ := payload["ok"].(bool); ok {
-		fmt.Println("健康检查：通过")
+	fmt.Println(banner())
+	fmt.Printf("获取账号“%s”成功！\n", prev.Email)
+	fmt.Printf("信息：%s\n", prev.Name)
+
+	if prev.Remaining <= 0 {
+		fmt.Println("核销次数已用尽，请联系管理员！")
+		return 1
 	}
-	if init, ok := payload["initialized"].(bool); ok {
-		fmt.Printf("服务已初始化：%v\n", init)
+
+	fmt.Printf("剩余核销次数：%d\n", prev.Remaining)
+
+	if cursor.IsRunning() {
+		fmt.Println("请先关闭运行中的 Cursor 后再尝试，注意保存未保存的工作！")
+		return 1
 	}
+
+	paths, err := cursor.ResolvePaths()
+	if err != nil {
+		fmt.Printf("无法定位 Cursor 数据目录：%v\n", err)
+		return 1
+	}
+	if err := paths.EnsureWritable(); err != nil {
+		fmt.Println(err.Error())
+		return 1
+	}
+
+	fmt.Print("确认要核销此账号吗？(y/n): ")
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+	ans := strings.TrimSpace(strings.ToLower(line))
+	if ans != "y" {
+		return 0
+	}
+
+	fmt.Println("正在登录账号...")
+	redeem, err := client.Redeem(code)
+	if err != nil {
+		var ae *api.APIError
+		if errors.As(err, &ae) {
+			fmt.Println(ae.Message)
+			return 1
+		}
+		fmt.Println("服务端连接失败，请重新安装后再次尝试！")
+		fmt.Println(api.ReasonAfterColon(err))
+		return 1
+	}
+
+	if err := cursor.ResetTelemetry(paths); err != nil {
+		fmt.Printf("写入本地设备身份失败：%v\n", err)
+		fmt.Println("次数可能已扣减，请联系管理员处理。")
+		return 1
+	}
+	if err := cursor.WriteAuth(paths, redeem.Email, redeem.AccessToken); err != nil {
+		fmt.Printf("写入本地登录态失败：%v\n", err)
+		fmt.Println("次数可能已扣减，请联系管理员处理。")
+		return 1
+	}
+
+	fmt.Println("登录成功！")
+	return 0
 }

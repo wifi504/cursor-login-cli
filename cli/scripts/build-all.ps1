@@ -17,12 +17,20 @@ $targets = @(
   @{ GOOS = "linux"; GOARCH = "arm64"; Ext = "" }
 )
 
+$ver = "dev"
+try {
+  $tag = (git describe --exact-match --tags HEAD 2>$null)
+  if ($LASTEXITCODE -eq 0 -and $tag) { $ver = $tag.Trim() }
+} catch {}
+$ldflags = "-X main.version=$ver"
+Write-Host "version=$ver"
+
 foreach ($t in $targets) {
   $env:GOOS = $t.GOOS
   $env:GOARCH = $t.GOARCH
   $out = "dist/cursor-login-$($t.GOOS)-$($t.GOARCH)$($t.Ext)"
   Write-Host "编译 $out"
-  go build -o $out .
+  go build -ldflags $ldflags -o $out .
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 

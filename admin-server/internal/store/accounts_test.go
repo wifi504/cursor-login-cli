@@ -76,3 +76,82 @@ func TestAccountsCRUDAndOptimisticLock(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestClaimPreviewAndRedeem(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	sqlDB, _, err := db.OpenBesideBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlDB.Close()
+	st := store.New(sqlDB)
+
+	code := "CLAIMCODE11111111111111111111111"
+	a, err := st.CreateAccount(store.AccountInput{
+		Name: "acc", Email: "t@ex.com", AccessToken: "tok", ClaimCode: code,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lim := 2
+	if _, err := st.UpdateClaimLimit(a.ID, 1, lim); err != nil {
+		t.Fatal(err)
+	}
+
+	prev, err := st.PreviewByClaimCode(code)
+	if err != nil || prev.Remaining != 2 {
+		t.Fatalf("preview=%+v err=%v", prev, err)
+	}
+
+	r1, err := st.RedeemByClaimCode(code)
+	if err != nil || r1.AccessToken != "tok" || r1.Remaining != 1 {
+		t.Fatalf("redeem1=%+v err=%v", r1, err)
+	}
+	r2, err := st.RedeemByClaimCode(code)
+	if err != nil || r2.Remaining != 0 {
+		t.Fatalf("redeem2=%+v err=%v", r2, err)
+	}
+	_, err = st.RedeemByClaimCode(code)
+	if err != store.ErrClaimExhausted {
+		t.Fatalf("want exhausted, got %v", err)
+	}
+
+	_, err = st.PreviewByClaimCode("nope")
+	if err != store.ErrNotFound {
+		t.Fatalf("want not found, got %v", err)
+	}
+
+	emptyToken := "EMPTYTOKEN1111111111111111111111"
+	_, err = st.CreateAccount(store.AccountInput{
+		Name: "empty-token", Email: "e@ex.com", AccessToken: "", ClaimCode: emptyToken,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = st.PreviewByClaimCode(emptyToken)
+	if err != store.ErrTokenNotReady {
+		t.Fatalf("want not ready on preview (empty token), got %v", err)
+	}
+	_, err = st.RedeemByClaimCode(emptyToken)
+	if err != store.ErrTokenNotReady {
+		t.Fatalf("want not ready on redeem (empty token), got %v", err)
+	}
+
+	emptyEmail := "EMPTYEMAIL1111111111111111111111"
+	_, err = st.CreateAccount(store.AccountInput{
+		Name: "empty-email", Email: "", AccessToken: "tok", ClaimCode: emptyEmail,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = st.PreviewByClaimCode(emptyEmail)
+	if err != store.ErrTokenNotReady {
+		t.Fatalf("want not ready on preview (empty email), got %v", err)
+	}
+	_, err = st.RedeemByClaimCode(emptyEmail)
+	if err != store.ErrTokenNotReady {
+		t.Fatalf("want not ready on redeem (empty email), got %v", err)
+	}
+}

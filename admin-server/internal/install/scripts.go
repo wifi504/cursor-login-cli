@@ -16,11 +16,63 @@ func Commands(baseURL string) map[string]string {
 	}
 }
 
+// unixUninstallBody 卸载步骤（不含 shebang / 收尾文案），供安装前清理复用。
+const unixUninstallBody = `BIN_DIR="${HOME}/.local/bin"
+rm -f "${BIN_DIR}/cursor-login"
+for f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+  if [ -f "$f" ]; then
+    sed -i.bak '/CURSOR_LOGIN_API=/d' "$f" 2>/dev/null || sed -i '' '/CURSOR_LOGIN_API=/d' "$f"
+  fi
+done
+unset CURSOR_LOGIN_API || true
+`
+
+// windowsUninstallBody 卸载步骤（不含收尾文案），供安装前清理复用。
+const windowsUninstallBody = `$RootDir = Join-Path $env:LOCALAPPDATA "cursor-login"
+$BinDir = Join-Path $RootDir "bin"
+Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $BinDir "cursor-login.exe")
+Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $BinDir "cursor-login.cmd")
+Remove-Item -Force -Recurse -ErrorAction SilentlyContinue $BinDir
+Remove-Item -Force -Recurse -ErrorAction SilentlyContinue $RootDir
+
+$MarkerBegin = "# >>> cursor-login >>>"
+$MarkerEnd = "# <<< cursor-login <<<"
+$NL = [Environment]::NewLine
+foreach ($Prof in @(
+  $PROFILE
+  (Join-Path $HOME "Documents\PowerShell\Microsoft.PowerShell_profile.ps1")
+  (Join-Path $HOME "Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1")
+) | Where-Object { $_ } | Select-Object -Unique) {
+  if (-not (Test-Path $Prof)) { continue }
+  $Existing = Get-Content -Path $Prof -Raw -ErrorAction SilentlyContinue
+  if ($Existing -and $Existing -match [regex]::Escape($MarkerBegin)) {
+    $Existing = [regex]::Replace($Existing, "(?s)\r?\n?" + [regex]::Escape($MarkerBegin) + ".*?" + [regex]::Escape($MarkerEnd) + "\r?\n?", $NL)
+    Set-Content -Path $Prof -Value $Existing.TrimStart() -Encoding UTF8
+  }
+}
+
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if ($userPath) {
+  $parts = $userPath.Split(';') | Where-Object { $_ -and ($_ -ne $BinDir) }
+  [Environment]::SetEnvironmentVariable("Path", ($parts -join ';'), "User")
+}
+
+[Environment]::SetEnvironmentVariable("CURSOR_LOGIN_API", $null, "User")
+Remove-Item Env:CURSOR_LOGIN_API -ErrorAction SilentlyContinue
+if (Get-Command cursor-login -CommandType Function -ErrorAction SilentlyContinue) {
+  Remove-Item -Path Function:cursor-login -ErrorAction SilentlyContinue
+}
+`
+
 func InstallSH(baseURL string) string {
 	base := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`#!/bin/sh
 set -e
 API_URL="%s"
+
+echo "正在清理旧安装（如有）..."
+%s
+
 BIN_DIR="${HOME}/.local/bin"
 mkdir -p "$BIN_DIR"
 
@@ -63,30 +115,25 @@ echo "请打开新终端（或 source 你的 shell 配置）后执行: cursor-lo
 if ! echo ":$PATH:" | grep -q ":${BIN_DIR}:"; then
   echo "提示: 如需直接运行，请将 ${BIN_DIR} 加入 PATH"
 fi
-`, base)
+`, base, unixUninstallBody)
 }
 
 func UninstallSH(baseURL string) string {
 	_ = baseURL
 	return `#!/bin/sh
 set -e
-BIN_DIR="${HOME}/.local/bin"
-rm -f "${BIN_DIR}/cursor-login"
-for f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
-  if [ -f "$f" ]; then
-    sed -i.bak '/CURSOR_LOGIN_API=/d' "$f" 2>/dev/null || sed -i '' '/CURSOR_LOGIN_API=/d' "$f"
-  fi
-done
-unset CURSOR_LOGIN_API || true
-echo "已卸载 Cursor Login CLI"
+` + unixUninstallBody + `echo "已卸载 Cursor Login CLI"
 `
 }
 
 func InstallPS1(baseURL string) string {
 	base := strings.TrimRight(baseURL, "/")
-	// 只改 User 环境变量 + PATH，cmd / Windows Terminal / pwsh / Git Bash 新开终端后都能用
 	return fmt.Sprintf(`$ErrorActionPreference = "Stop"
 $ApiUrl = "%s"
+
+Write-Host "正在清理旧安装（如有）..."
+%s
+
 $BinDir = Join-Path $env:LOCALAPPDATA "cursor-login\bin"
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
@@ -109,70 +156,15 @@ if ($userPath -notlike "*$BinDir*") {
   $env:Path = $env:Path + ";" + $BinDir
 }
 
-# 清理旧版误写入的 PowerShell profile 片段（若有）
-$MarkerBegin = "# >>> cursor-login >>>"
-$MarkerEnd = "# <<< cursor-login <<<"
-$NL = [Environment]::NewLine
-foreach ($Prof in @(
-  $PROFILE
-  (Join-Path $HOME "Documents\PowerShell\Microsoft.PowerShell_profile.ps1")
-  (Join-Path $HOME "Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1")
-) | Where-Object { $_ } | Select-Object -Unique) {
-  if (-not (Test-Path $Prof)) { continue }
-  $Existing = Get-Content -Path $Prof -Raw -ErrorAction SilentlyContinue
-  if ($Existing -and $Existing -match [regex]::Escape($MarkerBegin)) {
-    $Existing = [regex]::Replace($Existing, "(?s)\r?\n?" + [regex]::Escape($MarkerBegin) + ".*?" + [regex]::Escape($MarkerEnd) + "\r?\n?", $NL)
-    Set-Content -Path $Prof -Value $Existing.TrimStart() -Encoding UTF8
-  }
-}
-Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $BinDir "cursor-login.cmd")
-if (Get-Command cursor-login -CommandType Function -ErrorAction SilentlyContinue) {
-  Remove-Item -Path Function:cursor-login -ErrorAction SilentlyContinue
-}
-
 Write-Host "已安装 Cursor Login CLI 到 $Dest"
 Write-Host "请新开终端（cmd / Windows Terminal / pwsh / Git Bash）后执行: cursor-login"
-`, base)
+`, base, windowsUninstallBody)
 }
 
 func UninstallPS1(baseURL string) string {
 	_ = baseURL
 	return `$ErrorActionPreference = "Stop"
-$RootDir = Join-Path $env:LOCALAPPDATA "cursor-login"
-$BinDir = Join-Path $RootDir "bin"
-Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $BinDir "cursor-login.exe")
-Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $BinDir "cursor-login.cmd")
-# 清掉空目录残留
-Remove-Item -Force -Recurse -ErrorAction SilentlyContinue $BinDir
-Remove-Item -Force -Recurse -ErrorAction SilentlyContinue $RootDir
-
-$MarkerBegin = "# >>> cursor-login >>>"
-$MarkerEnd = "# <<< cursor-login <<<"
-$NL = [Environment]::NewLine
-foreach ($Prof in @(
-  $PROFILE
-  (Join-Path $HOME "Documents\PowerShell\Microsoft.PowerShell_profile.ps1")
-  (Join-Path $HOME "Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1")
-) | Where-Object { $_ } | Select-Object -Unique) {
-  if (-not (Test-Path $Prof)) { continue }
-  $Existing = Get-Content -Path $Prof -Raw -ErrorAction SilentlyContinue
-  if ($Existing -and $Existing -match [regex]::Escape($MarkerBegin)) {
-    $Existing = [regex]::Replace($Existing, "(?s)\r?\n?" + [regex]::Escape($MarkerBegin) + ".*?" + [regex]::Escape($MarkerEnd) + "\r?\n?", $NL)
-    Set-Content -Path $Prof -Value $Existing.TrimStart() -Encoding UTF8
-  }
-}
-
-$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if ($userPath) {
-  $parts = $userPath.Split(';') | Where-Object { $_ -and ($_ -ne $BinDir) }
-  [Environment]::SetEnvironmentVariable("Path", ($parts -join ';'), "User")
-}
-
-[Environment]::SetEnvironmentVariable("CURSOR_LOGIN_API", $null, "User")
-Remove-Item Env:CURSOR_LOGIN_API -ErrorAction SilentlyContinue
-if (Get-Command cursor-login -CommandType Function -ErrorAction SilentlyContinue) {
-  Remove-Item -Path Function:cursor-login -ErrorAction SilentlyContinue
-}
+` + windowsUninstallBody + `
 Write-Host "已卸载 Cursor Login CLI"
 `
 }
