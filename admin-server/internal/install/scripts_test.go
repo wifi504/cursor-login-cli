@@ -14,22 +14,32 @@ func TestCommands(t *testing.T) {
 	if !strings.Contains(iu, "mktemp") || !strings.Contains(iu, `sh "$tmp"`) {
 		t.Fatalf("install_unix should download then sh temp file: %q", iu)
 	}
+	if !strings.HasPrefix(iu, "(") || !strings.HasSuffix(iu, ")") {
+		t.Fatalf("install_unix should run in subshell: %q", iu)
+	}
 	if !strings.Contains(iu, "https://example.com/install.sh") || !strings.Contains(iu, "exit $e") {
 		t.Fatalf("install_unix=%q", iu)
 	}
 	uu := m["uninstall_unix"]
-	if strings.Contains(uu, "| sh") || !strings.Contains(uu, "uninstall.sh") {
+	if strings.Contains(uu, "| sh") || !strings.Contains(uu, "uninstall.sh") || !strings.HasPrefix(uu, "(") {
 		t.Fatalf("uninstall_unix=%q", uu)
 	}
 	iw := m["install_windows"]
 	if strings.Contains(iw, "| iex") {
 		t.Fatalf("install_windows must not use irm|iex pipe: %q", iw)
 	}
+	if strings.Contains(iw, "exit $LASTEXITCODE") {
+		t.Fatalf("install_windows must not exit current host: %q", iw)
+	}
 	if !strings.Contains(iw, "Invoke-WebRequest") || !strings.Contains(iw, "OutFile") || !strings.Contains(iw, "powershell.exe") || !strings.Contains(iw, "-File $tmp") {
 		t.Fatalf("install_windows should download then run temp ps1: %q", iw)
 	}
-	if !strings.Contains(m["uninstall_windows"], "uninstall.ps1") {
-		t.Fatalf("uninstall_windows=%q", m["uninstall_windows"])
+	if !strings.Contains(iw, "throw") {
+		t.Fatalf("install_windows should throw on failure: %q", iw)
+	}
+	uw := m["uninstall_windows"]
+	if !strings.Contains(uw, "uninstall.ps1") || strings.Contains(uw, "exit $LASTEXITCODE") {
+		t.Fatalf("uninstall_windows=%q", uw)
 	}
 }
 

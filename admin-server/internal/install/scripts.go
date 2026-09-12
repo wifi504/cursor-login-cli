@@ -7,17 +7,20 @@ import (
 
 // Commands 返回 Cursor Login Admin 可复制的一键安装/卸载命令。
 // Unix/Windows 均先下载到临时文件再执行，避免 curl|sh / irm|iex 在下载失败时仍以 0 退出。
+// 注意：不要在入口命令里对当前 shell 调用 exit，否则交互终端会直接被关掉。
 func Commands(baseURL string) map[string]string {
 	base := strings.TrimRight(baseURL, "/")
 	return map[string]string{
+		// 子 shell 内 exit，只影响子进程退出码，不关闭用户当前终端
 		"install_unix": fmt.Sprintf(
-			`tmp=$(mktemp) && curl -fsSL %s/install.sh -o "$tmp" && sh "$tmp"; e=$?; rm -f "$tmp"; exit $e`, base),
+			`(tmp=$(mktemp) && curl -fsSL %s/install.sh -o "$tmp" && sh "$tmp"; e=$?; rm -f "$tmp"; exit $e)`, base),
 		"uninstall_unix": fmt.Sprintf(
-			`tmp=$(mktemp) && curl -fsSL %s/uninstall.sh -o "$tmp" && sh "$tmp"; e=$?; rm -f "$tmp"; exit $e`, base),
+			`(tmp=$(mktemp) && curl -fsSL %s/uninstall.sh -o "$tmp" && sh "$tmp"; e=$?; rm -f "$tmp"; exit $e)`, base),
+		// PowerShell 的 exit 会结束整个宿主进程；失败用 throw，成功自然返回
 		"install_windows": fmt.Sprintf(
-			`$tmp = Join-Path $env:TEMP ("cursor-login-install-" + [guid]::NewGuid().ToString() + ".ps1"); try { Invoke-WebRequest -Uri %s/install.ps1 -OutFile $tmp; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmp; exit $LASTEXITCODE } finally { Remove-Item -Force -ErrorAction SilentlyContinue $tmp }`, base),
+			`$tmp = Join-Path $env:TEMP ("cursor-login-install-" + [guid]::NewGuid().ToString() + ".ps1"); try { Invoke-WebRequest -Uri %s/install.ps1 -OutFile $tmp; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmp; if ($LASTEXITCODE -ne 0) { throw "install failed: $LASTEXITCODE" } } finally { Remove-Item -Force -ErrorAction SilentlyContinue $tmp }`, base),
 		"uninstall_windows": fmt.Sprintf(
-			`$tmp = Join-Path $env:TEMP ("cursor-login-uninstall-" + [guid]::NewGuid().ToString() + ".ps1"); try { Invoke-WebRequest -Uri %s/uninstall.ps1 -OutFile $tmp; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmp; exit $LASTEXITCODE } finally { Remove-Item -Force -ErrorAction SilentlyContinue $tmp }`, base),
+			`$tmp = Join-Path $env:TEMP ("cursor-login-uninstall-" + [guid]::NewGuid().ToString() + ".ps1"); try { Invoke-WebRequest -Uri %s/uninstall.ps1 -OutFile $tmp; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmp; if ($LASTEXITCODE -ne 0) { throw "uninstall failed: $LASTEXITCODE" } } finally { Remove-Item -Force -ErrorAction SilentlyContinue $tmp }`, base),
 	}
 }
 
