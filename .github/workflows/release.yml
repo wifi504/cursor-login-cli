@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: 构建发布全平台
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 确认 tag 落在 main
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+            echo "::error::Tag ${GITHUB_REF_NAME} 对应提交不在 origin/main 历史中，已中止发布。"
+            exit 1
+          fi
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: admin-server/go.mod
+          cache-dependency-path: |
+            admin-server/go.sum
+            cli/go.sum
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: admin-web/pnpm-lock.yaml
+
+      - name: 安装前端依赖
+        working-directory: admin-web
+        run: pnpm install --frozen-lockfile
+
+      - name: 1/3 打包前端资源
+        run: |
+          set -euo pipefail
+          root="${GITHUB_WORKSPACE}"
+          rm -rf "${root}/admin-web/dist"
+          mkdir -p "${root}/admin-server/web/dist"
+          find "${root}/admin-server/web/dist" -mindepth 1 -delete
+          printf '%s\n' '<!DOCTYPE html><html><body><p>frontend build pending</p></body></html>' > "${root}/admin-server/web/dist/index.html"
+          (cd "${root}/admin-web" && pnpm build)
+          cp -a "${root}/admin-web/dist/." "${root}/admin-server/web/dist/"
+          echo "前端已构建并复制到 admin-server/web/dist"
+
+      - name: 2/3 编译全平台 CLI
+        run: bash cli/scripts/build-all.sh
+
+      - name: 3/3 编译全平台服务端
+        run: bash admin-server/scripts/build-all.sh
+
+      - name: 列出产物
+        run: ls -lh admin-server/dist/
+
+      - name: 创建 GitHub Release 并上传 admin-server
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Cursor Login ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          files: admin-server/dist/admin-server-*
+          body: |
+            ## Cursor Login ${{ github.ref_name }}
+
+            本 Release 提供 **Cursor Login Server** 全平台单文件二进制（已嵌入 Admin 前端与各平台 CLI）。
+
+            ### 下载说明
+
+            | 文件 | 平台 |
+            | --- | --- |
+            | `admin-server-windows-amd64.exe` | Windows x64 |
+            | `admin-server-windows-arm64.exe` | Windows ARM64 |
+            | `admin-server-darwin-amd64` | macOS Intel |
+            | `admin-server-darwin-arm64` | macOS Apple Silicon |
+            | `admin-server-linux-amd64` | Linux x64 |
+            | `admin-server-linux-arm64` | Linux ARM64 |
+
+            ### 快速开始
+
+            1. 按操作系统下载对应 `admin-server-*` 文件，赋予可执行权限（非 Windows）。
+            2. 启动服务，例如：`./admin-server-linux-amd64 --listen :8080`
+            3. 按终端日志中的 **安全入口** 打开 Cursor Login Admin。
+            4. 在管理端复制安装命令，为员工安装 Cursor Login CLI。
+            5. 创建账号并填写邮箱与 AccessToken 后，员工执行：`cursor-login <上号码>`
+
+            ### 说明
+
+            - CLI 已嵌入服务端，安装脚本通过 `/download/...` 拉取，无需单独发布 CLI 包。
+            - 数据库与日志默认写在服务端二进制所在目录。
+            - 生产环境请使用 HTTPS 反代，并妥善保管管理员密码与安全入口路径。
+
+            ### 变更记录
+            
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
