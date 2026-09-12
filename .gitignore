@@ -1,0 +1,30 @@
+# 依赖
+node_modules/
+admin-web/node_modules/
+
+# 构建产物
+/dist
+admin-web/dist/
+admin-server/bin/
+admin-server/dist/
+admin-server/cursor-login.db
+admin-server/logs/
+admin-server/releases/bin/*
+!admin-server/releases/bin/.gitkeep
+cli/bin/
+cli/dist/
+*.exe
+
+# 运行时数据（本地运行时在二进制旁）
+admin-server/bin/*.db
+admin-server/bin/logs/
+*.db
+
+# 日志 / IDE
+logs/
+.DS_Store
+*.log
+
+# 发版产物覆盖此目录；保留 index.html 占位，避免空目录导致 go:embed 失败
+admin-server/web/dist/*
+!admin-server/web/dist/index.html

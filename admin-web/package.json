@@ -1,0 +1,45 @@
+{
+  "name": "cursor-login-admin-web",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "type-check": "vue-tsc -b",
+    "build-only": "vite build",
+    "preview": "vite preview",
+    "lint:js": "eslint .",
+    "lint:js:fix": "eslint . --fix",
+    "lint:css": "stylelint \"**/*.{css,less,vue,html}\"",
+    "lint:css:fix": "stylelint \"**/*.{css,less,vue,html}\" --fix",
+    "lint:all": "pnpm lint:js && pnpm lint:css",
+    "lint:all:fix": "pnpm lint:js:fix && pnpm lint:css:fix",
+    "gen-routes": "gen-vue-routes"
+  },
+  "dependencies": {
+    "@arco-design/web-vue": "^2.57.0",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.18",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@ezview/eslint-config": "^1.0.0",
+    "@ezview/gen-vue-routes": "^1.1.2",
+    "@types/node": "^24.2.0",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/tsconfig": "^0.7.0",
+    "eslint": "^9.32.0",
+    "less": "^4.4.0",
+    "postcss-html": "^1.8.0",
+    "postcss-less": "^6.0.0",
+    "stylelint": "^16.26.1",
+    "stylelint-config-rational-order": "^0.1.2",
+    "stylelint-config-recommended-vue": "^1.6.1",
+    "stylelint-config-standard": "^39.0.1",
+    "stylelint-less": "^4.0.0",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.11",
+    "vue-tsc": "^3.0.5"
+  }
+}

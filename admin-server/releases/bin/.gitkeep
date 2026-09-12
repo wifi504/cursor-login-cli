@@ -1,0 +1,10 @@
+# 发版流水线：先编译 CLI 全平台产物到本目录，再编译 admin-server，由其 go:embed 打进二进制。
+# 本地 go run 时若本目录暂无产物，/download 会 404（开发联调管理端不依赖这里）。
+#
+# 期望文件名：
+#   cursor-login-windows-amd64.exe
+#   cursor-login-windows-arm64.exe
+#   cursor-login-darwin-amd64
+#   cursor-login-darwin-arm64
+#   cursor-login-linux-amd64
+#   cursor-login-linux-arm64

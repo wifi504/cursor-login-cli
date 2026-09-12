@@ -1,0 +1,301 @@
+﻿{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "组合：安装全部依赖",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "shell": {
+            "executable": "powershell.exe",
+            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
+          }
+        },
+        "command": "${workspaceFolder}/scripts/install-all.ps1"
+      },
+      "linux": {
+        "command": "bash \"${workspaceFolder}/scripts/install-all.sh\""
+      },
+      "osx": {
+        "command": "bash \"${workspaceFolder}/scripts/install-all.sh\""
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "group": "combo",
+        "clear": false,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "组合：开发启动前后端",
+      "dependsOrder": "parallel",
+      "dependsOn": [
+        "开发：启动 Cursor Login Server",
+        "开发：启动 Cursor Login Admin"
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "组合：构建发布全平台",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "shell": {
+            "executable": "powershell.exe",
+            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
+          }
+        },
+        "command": "${workspaceFolder}/scripts/build-release.ps1"
+      },
+      "linux": {
+        "command": "bash \"${workspaceFolder}/scripts/build-release.sh\""
+      },
+      "osx": {
+        "command": "bash \"${workspaceFolder}/scripts/build-release.sh\""
+      },
+      "problemMatcher": [],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "group": "combo",
+        "clear": false,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "清理：构建产物",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "shell": {
+            "executable": "powershell.exe",
+            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
+          }
+        },
+        "command": "${workspaceFolder}/scripts/clean.ps1"
+      },
+      "linux": {
+        "command": "bash \"${workspaceFolder}/scripts/clean.sh\""
+      },
+      "osx": {
+        "command": "bash \"${workspaceFolder}/scripts/clean.sh\""
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "group": "clean",
+        "clear": false,
+        "showReuseMessage": false
+      }
+    },
+
+    {
+      "label": "安装：Cursor Login Admin 依赖",
+      "type": "shell",
+      "command": "pnpm install",
+      "options": {
+        "cwd": "${workspaceFolder}/admin-web"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "group": "install",
+        "clear": false,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "安装：Cursor Login Server 依赖",
+      "type": "shell",
+      "command": "go mod download",
+      "options": {
+        "cwd": "${workspaceFolder}/admin-server"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "group": "install",
+        "clear": false,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "安装：Cursor Login CLI 依赖",
+      "type": "shell",
+      "command": "go mod download",
+      "options": {
+        "cwd": "${workspaceFolder}/cli"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "group": "install",
+        "clear": false,
+        "showReuseMessage": false
+      }
+    },
+
+    {
+      "label": "开发：启动 Cursor Login Admin",
+      "type": "shell",
+      "command": "pnpm dev",
+      "options": {
+        "cwd": "${workspaceFolder}/admin-web"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "(Local:|ready in)"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "dev-web",
+        "clear": false
+      }
+    },
+    {
+      "label": "开发：启动 Cursor Login Server",
+      "type": "shell",
+      "command": "go run ./cmd/server --listen :8080 --dev",
+      "options": {
+        "cwd": "${workspaceFolder}/admin-server"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "go-server",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "服务监听"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "dev-server",
+        "clear": false
+      }
+    },
+
+    {
+      "label": "构建：打包 Cursor Login Admin",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "shell": {
+            "executable": "powershell.exe",
+            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
+          }
+        },
+        "command": "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue '${workspaceFolder}/admin-web/dist'; Get-ChildItem -Path '${workspaceFolder}/admin-server/web/dist' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue; New-Item -ItemType Directory -Force -Path '${workspaceFolder}/admin-server/web/dist' | Out-Null; Set-Content -Path '${workspaceFolder}/admin-server/web/dist/index.html' -Encoding UTF8 -Value '<!DOCTYPE html><html><body><p>frontend build pending</p></body></html>'; Set-Location '${workspaceFolder}/admin-web'; pnpm build; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Copy-Item -Path '${workspaceFolder}/admin-web/dist/*' -Destination '${workspaceFolder}/admin-server/web/dist' -Recurse -Force; Write-Host '前端已构建并复制到 admin-server/web/dist'"
+      },
+      "linux": {
+        "command": "rm -rf \"${workspaceFolder}/admin-web/dist\"; mkdir -p \"${workspaceFolder}/admin-server/web/dist\"; find \"${workspaceFolder}/admin-server/web/dist\" -mindepth 1 -delete; printf '%s\\n' '<!DOCTYPE html><html><body><p>frontend build pending</p></body></html>' > \"${workspaceFolder}/admin-server/web/dist/index.html\"; cd \"${workspaceFolder}/admin-web\" && pnpm build && cp -a dist/. \"${workspaceFolder}/admin-server/web/dist/\" && echo '前端已构建并复制到 admin-server/web/dist'"
+      },
+      "osx": {
+        "command": "rm -rf \"${workspaceFolder}/admin-web/dist\"; mkdir -p \"${workspaceFolder}/admin-server/web/dist\"; find \"${workspaceFolder}/admin-server/web/dist\" -mindepth 1 -delete; printf '%s\\n' '<!DOCTYPE html><html><body><p>frontend build pending</p></body></html>' > \"${workspaceFolder}/admin-server/web/dist/index.html\"; cd \"${workspaceFolder}/admin-web\" && pnpm build && cp -a dist/. \"${workspaceFolder}/admin-server/web/dist/\" && echo '前端已构建并复制到 admin-server/web/dist'"
+      },
+      "problemMatcher": [],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "group": "build",
+        "clear": false,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "构建：编译全平台 Cursor Login CLI",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "shell": {
+            "executable": "powershell.exe",
+            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
+          },
+          "cwd": "${workspaceFolder}/cli"
+        },
+        "command": "${workspaceFolder}/cli/scripts/build-all.ps1"
+      },
+      "linux": {
+        "options": {
+          "cwd": "${workspaceFolder}/cli"
+        },
+        "command": "bash scripts/build-all.sh"
+      },
+      "osx": {
+        "options": {
+          "cwd": "${workspaceFolder}/cli"
+        },
+        "command": "bash scripts/build-all.sh"
+      },
+      "problemMatcher": [],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "group": "build",
+        "clear": false,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "构建：编译全平台 Cursor Login Server",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "shell": {
+            "executable": "powershell.exe",
+            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
+          },
+          "cwd": "${workspaceFolder}/admin-server"
+        },
+        "command": "${workspaceFolder}/admin-server/scripts/build-all.ps1"
+      },
+      "linux": {
+        "options": {
+          "cwd": "${workspaceFolder}/admin-server"
+        },
+        "command": "bash scripts/build-all.sh"
+      },
+      "osx": {
+        "options": {
+          "cwd": "${workspaceFolder}/admin-server"
+        },
+        "command": "bash scripts/build-all.sh"
+      },
+      "problemMatcher": [],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "group": "build",
+        "clear": false,
+        "showReuseMessage": false
+      }
+    }
+  ]
+}
