@@ -149,25 +149,8 @@ set -e
 `
 }
 
-// windowsBroadcastEnv 通知资源管理器等刷新用户环境变量。
-const windowsBroadcastEnv = `function Publish-CursorLoginEnvChange {
-  try {
-    Add-Type -Namespace CursorLogin -Name Native -MemberDefinition @"
-[DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)]
-public static extern IntPtr SendMessageTimeout(
-  IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam,
-  uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
-"@ -ErrorAction SilentlyContinue
-    $HWND_BROADCAST = [IntPtr]0xffff
-    $WM_SETTINGCHANGE = 0x1a
-    $result = [UIntPtr]::Zero
-    [void][CursorLogin.Native]::SendMessageTimeout(
-      $HWND_BROADCAST, $WM_SETTINGCHANGE, [UIntPtr]::Zero, "Environment", 2, 5000, [ref]$result)
-  } catch {}
-}
-`
-
 // windowsUninstallBody 卸载步骤（不含收尾文案）。
+// 说明：User 级 SetEnvironmentVariable 会自行广播 WM_SETTINGCHANGE，无需 Add-Type。
 const windowsUninstallBody = `$RootDir = Join-Path $env:LOCALAPPDATA "cursor-login"
 $BinDir = Join-Path $RootDir "bin"
 Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $BinDir "cursor-login.exe")
@@ -256,21 +239,17 @@ if (-not (Test-CursorLoginPathContains $env:Path $BinDir)) {
   $env:Path = $env:Path + ";" + $BinDir
 }
 
-%s
-Publish-CursorLoginEnvChange
-
 Write-Host "已安装 Cursor Login CLI 到 $Dest"
 Write-Host "请新开终端后执行: cursor-login"
 Write-Host "若仍提示找不到命令：请关掉整个 Windows Terminal / 重启 IDE 后再试（已打开的终端不会自动刷新环境变量）。"
 Write-Host "重复安装会覆盖升级；卸载请使用管理端提供的卸载命令。"
-`, base, windowsBroadcastEnv)
+`, base)
 }
 
 func UninstallPS1(baseURL string) string {
 	_ = baseURL
 	return `$ErrorActionPreference = "Stop"
-` + windowsUninstallBody + windowsBroadcastEnv + `
-Publish-CursorLoginEnvChange
+` + windowsUninstallBody + `
 Write-Host "已卸载 Cursor Login CLI"
 `
 }

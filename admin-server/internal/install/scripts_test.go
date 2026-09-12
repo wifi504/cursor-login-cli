@@ -111,11 +111,8 @@ func TestInstallPS1_AtomicAndBroadcast(t *testing.T) {
 	if !strings.Contains(ps, "下载失败，已保留原有安装") {
 		t.Fatal("expected keep-old-on-failure message")
 	}
-	if !strings.Contains(ps, "Publish-CursorLoginEnvChange") {
-		t.Fatal("expected env broadcast")
-	}
-	if !strings.Contains(ps, "SendMessageTimeout") {
-		t.Fatal("expected WM_SETTINGCHANGE broadcast")
+	if strings.Contains(ps, "Add-Type") || strings.Contains(ps, "SendMessageTimeout") {
+		t.Fatal("must not embed fragile Add-Type here-string")
 	}
 	if !strings.Contains(ps, "重启 IDE") {
 		t.Fatal("expected IDE restart hint")
@@ -136,7 +133,7 @@ func TestUninstallPS1_DeletesEnvKey(t *testing.T) {
 	if !strings.Contains(ps, `[NullString]::Value`) {
 		t.Fatal("expected NullString env delete")
 	}
-	if !strings.Contains(ps, "Publish-CursorLoginEnvChange") {
-		t.Fatal("expected env broadcast on uninstall")
+	if strings.Contains(ps, "Add-Type") || strings.Contains(ps, "Publish-CursorLoginEnvChange") {
+		t.Fatal("must not embed fragile Add-Type broadcast helper")
 	}
 }

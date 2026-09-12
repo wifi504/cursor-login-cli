@@ -95,8 +95,7 @@ func (s *Server) handleInstallPS1(c *gin.Context) {
 	if !ok {
 		return
 	}
-	c.Header("Content-Type", "text/plain; charset=utf-8")
-	c.String(http.StatusOK, install.InstallPS1(base))
+	writePS1(c, install.InstallPS1(base))
 }
 
 func (s *Server) handleUninstallPS1(c *gin.Context) {
@@ -104,8 +103,15 @@ func (s *Server) handleUninstallPS1(c *gin.Context) {
 	if !ok {
 		return
 	}
+	writePS1(c, install.UninstallPS1(base))
+}
+
+// writePS1 下发带 UTF-8 BOM 的 PowerShell 脚本，避免 Windows PowerShell 5.1
+// 用 -File 按系统 ANSI 误读中文，导致引号错位与解析失败。
+func writePS1(c *gin.Context, body string) {
 	c.Header("Content-Type", "text/plain; charset=utf-8")
-	c.String(http.StatusOK, install.UninstallPS1(base))
+	bom := []byte{0xEF, 0xBB, 0xBF}
+	c.Data(http.StatusOK, "text/plain; charset=utf-8", append(bom, []byte(body)...))
 }
 
 func (s *Server) handleDownload(c *gin.Context) {
